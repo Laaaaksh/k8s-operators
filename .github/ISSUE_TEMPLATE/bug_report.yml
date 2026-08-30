@@ -1,0 +1,40 @@
+name: Bug report
+description: Something in the operator, the tests, or the curriculum is wrong
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a problem.
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: File or curriculum stage this is about, e.g. `code/webapp-operator/internal/controller/webapp_controller.go` or `curriculum/05-finalizers.md`.
+      placeholder: "code/webapp-operator/internal/registry/registry.go"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What's wrong?
+      description: A failing test, a wrong claim, a dead link, incorrect reconciler behavior, etc. Include the exact error text or `kubectl` output if there is one.
+      placeholder: |
+        1. Ran `make test` in code/webapp-operator
+        2. Got this error: ...
+    validations:
+      required: true
+  - type: input
+    id: k8s-version
+    attributes:
+      label: Kubernetes version
+      description: Output of `kubectl version`, or the envtest/kind version if that's what you ran against. Only needed for cluster-behavior bugs, not doc issues.
+    validations:
+      required: false
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Output of `go version`. Only needed for build/test bugs.
+    validations:
+      required: false

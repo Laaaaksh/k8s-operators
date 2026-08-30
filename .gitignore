@@ -1,0 +1,8 @@
+# Editor / OS cruft
+.DS_Store
+*.swp
+.vscode/
+.idea/
+
+# code/webapp-operator has its own .gitignore for Go build artifacts,
+# envtest binaries, and local tool binaries (bin/).

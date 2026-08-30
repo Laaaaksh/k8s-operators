@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# Superseded runs (new commit pushed to the same branch/PR) are pure waste;
+# cancelling them early keeps the queue free. CI publishes nothing, so
+# cancellation is always safe here.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: code/webapp-operator
+
+jobs:
+  test:
+    name: Build & test (go build/vet, envtest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: code/webapp-operator/go.mod
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      # `make test` regenerates manifests/deepcopy first (make manifests
+      # generate) and fails if that changes tracked files that weren't
+      # committed - the same "generated code matches source" check
+      # `make manifests` gives you locally.
+      - name: make test (unit + envtest integration)
+        run: make test
+
+      - name: manifests/deepcopy are up to date
+        run: git diff --exit-code -- api/ config/
+
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: code/webapp-operator/go.mod
+
+      - name: make lint
+        run: make lint
+
+  helm:
+    name: Helm chart lint & template
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Install Helm
+        run: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - run: helm lint dist/chart
+      - run: helm template webapp-operator dist/chart > /dev/null
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: code/webapp-operator/go.mod
+
+      - name: dist/install.yaml is up to date with config/
+        run: |
+          make build-installer
+          git diff --exit-code -- dist/install.yaml
+
+  e2e:
+    name: kind end-to-end (real cluster, real conversion webhook)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6.3.0
+        with:
+          go-version-file: code/webapp-operator/go.mod
+
+      - name: Install kind
+        run: |
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/latest/kind-linux-$(go env GOARCH)
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          kind version
+
+      # Creates its own kind cluster, installs cert-manager, builds and
+      # loads the manager image, deploys via Kustomize, creates a WebApp
+      # as v1alpha1, and asserts the real /convert webhook, Deployment,
+      # Service, and finalizer-driven deletion all work - then tears the
+      # cluster down. See test/e2e/e2e_test.go.
+      - name: make test-e2e
+        run: make test-e2e
